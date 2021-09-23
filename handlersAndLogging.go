@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,11 @@ type DurationLogT struct {
 }
 
 var durLog DurationLogT
+
+type statusMessageT struct {
+	Total   int64 `json:"total"`
+	Average int64 `json:"average"`
+}
 
 func handleHashCreate(w http.ResponseWriter, req *http.Request) {
 	if req.Method != "POST" {
@@ -45,8 +51,17 @@ func handleHashCreate(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	passwd := buf.String()
+	var command string
 	if i := strings.IndexByte(passwd, '='); i >= 0 {
+		command = passwd[:i]
 		passwd = passwd[i+1:]
+		if command != "password" {
+			// tradeoff between user friendly and security-by-obscurity - I've chosen the latter
+			// depending on the client, it might be better to return a more helpful error message
+			http.Error(w, "post not in expected format", http.StatusBadRequest)
+			finalState <- "fail"
+			return
+		}
 	} else {
 		http.Error(w, "post not in expected format", http.StatusBadRequest)
 		finalState <- "fail"
@@ -121,12 +136,19 @@ func showStats(w http.ResponseWriter, req *http.Request) {
 	}
 	durLog.mu.Unlock()
 
+	var status statusMessageT
+
 	if totalEntries > 0 {
-		averageDur := totalDur / totalEntries
-		fmt.Fprintf(w, "{\"total\": %d, \"average\": %d, \"totalMicroseconds\": %d}", totalEntries, averageDur, totalDur)
-	} else {
-		fmt.Fprint(w, "{\"total\": 0, \"average\": 0}")
+		status.Average = totalDur / totalEntries
+		status.Total = totalEntries
 	}
+
+	if result, err := json.Marshal(&status); err != nil {
+		http.Error(w, "", http.StatusInternalServerError)
+	} else {
+		fmt.Fprint(w, string(result))
+	}
+
 }
 
 func shutdownHandler(donechannel chan bool) func(http.ResponseWriter, *http.Request) {

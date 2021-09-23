@@ -1,4 +1,14 @@
 
+[23 Sep 2021 1555]
+I did some code re-organization - split this up into 3 file:
+   1 main.go
+   2 hasher.go
+   3 handlersAndLogging.go
+
+I also moved to a more go-ful way of handing getting ids for concurrent requests - using a channel rather than a mutex, etc
+
+Next I'm going to fix the json output.
+
 
 [22 Sep 2021 1815]
 Minimum requirements met.  There is still a lot to do:
@@ -46,3 +56,6 @@ at the top and bottom of the handler show zero delta at the nanosecond granulari
 might be an error
 
 
+net/http/pprof package registers http handlers that provide debugging information
+
+ One instance is in the encoding/json package, which defines a Marshaler interface. When the JSON encoder receives a value that implements that interface, the encoder invokes the value's marshaling method to convert it to JSON instead of doing the standard conversion.

@@ -26,7 +26,7 @@ It returns an id that, as of this writing, is a simple int.
 curl --data "password=AngryMonkey" http://localhost:8080/hash
 123
 ```
-The returned string is an id by which you can retrieve the hash 5 seconds five seconds after its creation.
+The returned string is an id by which you can retrieve the hash five seconds after its creation.
 
 ### Reading a Hash
 Five seconds after requesting a new hash, the `/hash/{id}` interface may be called to return a bare
@@ -121,12 +121,15 @@ a separate count of the size of the hash cache.
 
 ## Productionizing
 If this were a production service it would have these additional features
+* Persistent, fault tolerant storage for the hash values
+   * likely a db, keyserver, or cloud storage
 * More complete logging
    * likely both request logs as well as response logs w/ a tracing id to join them
    * possibly also a diagnostic log for messages like "starting up" or "crashing"
    * log rotation to both limit the size of logs but also how much disk they should use
-      * maybe better to send logs to an aggregator
-* More config - it looks like there are quite a few options - I like yaml - but this  would use the JumpCloud standard config paradigm
+      * it may be better to send logs to an aggregator
+* More config - there are quite a few ways to specify and ship configuration - I like
+yaml files - but this  would use the company's standard config paradigm
    * configs would tune port, timeouts, log files, log rotation policy, storage configs
 	    (like if the hasher were being backed by a key val store or database)
 * A more complete status message with info like
@@ -143,6 +146,9 @@ If this were a production service it would have these additional features
   value struct.  Entries could expire after some time or maybe, with a little added
   tooling, entries could be removed based on their last access time.
 
+##Postscript
+This is my first experience writing Go - and it was a lot of fun!  Thanks for giving me
+the opportunity to get my feet wet - I'm looking forward to learning more!
 
 [Go environment]: https://golang.org/doc/install
 

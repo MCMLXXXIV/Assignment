@@ -146,7 +146,7 @@ yaml files - but this  would use the company's standard config paradigm
   value struct.  Entries could expire after some time or maybe, with a little added
   tooling, entries could be removed based on their last access time.
 
-##Postscript
+## Postscript
 This is my first experience writing Go - and it was a lot of fun!  Thanks for giving me
 the opportunity to get my feet wet - I'm looking forward to learning more!
 

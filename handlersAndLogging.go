@@ -38,6 +38,21 @@ type statusMessageT struct {
 	Average int64 `json:"average"`
 }
 
+func logDuration(entryArg *durationTableEntry) {
+	entry := *entryArg
+	entry.duration = time.Now().Sub(entry.startTime)
+
+	// the spec was unclear; I'm choosing to only log durations of successful request
+	// see readme for details
+	if entry.finalState == "ok" {
+		durLog.mu.Lock()
+		durLog.table = append(durLog.table, entry)
+		durLog.mu.Unlock()
+	}
+	// note: in testing, the average duration was often zero - it seems unlikely but
+	// if there was an error, I didn't find it
+}
+
 // here we handle requests to create a new hash
 func handleHashCreate(waitgroup *sync.WaitGroup) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {
@@ -94,21 +109,6 @@ func handleHashCreate(waitgroup *sync.WaitGroup) func(w http.ResponseWriter, req
 		status.finalState = "ok"
 		return
 	}
-}
-
-func logDuration(entryArg *durationTableEntry) {
-	entry := *entryArg
-	entry.duration = time.Now().Sub(entry.startTime)
-
-	// the spec was unclear; I'm choosing to only log durations of successful request
-	// see readme for details
-	if entry.finalState == "ok" {
-		durLog.mu.Lock()
-		durLog.table = append(durLog.table, entry)
-		durLog.mu.Unlock()
-	}
-	// note: in testing, the average duration was often zero - it seems unlikely but
-	// if there was an error, I didn't find it
 }
 
 func handleHashRead(w http.ResponseWriter, req *http.Request) {
@@ -168,7 +168,6 @@ func showStats(w http.ResponseWriter, req *http.Request) {
 	}
 
 }
-
 
 func shutdownHandler(donechannel chan bool) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {

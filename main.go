@@ -72,7 +72,7 @@ import (
 )
 
 func main() {
-	// let's setup our wait group for graceful exit
+	// let's set up our wait group for graceful exit
 	var waitgroup sync.WaitGroup
 
 	listenPort := flag.Int("p", 8080, "the port on which the service will listen")

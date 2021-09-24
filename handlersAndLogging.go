@@ -31,7 +31,7 @@ type durationLogT struct {
 
 var durLog durationLogT
 
-// the contents of our status messsages ready for json serialization
+// the contents of our status messages ready for json serialization
 type statusMessageT struct {
 	Total   int64 `json:"total"`
 	Average int64 `json:"average"`
@@ -122,7 +122,7 @@ func handleHashRead(w http.ResponseWriter, req *http.Request) {
 	// correctness tests in these functions
 	dir, id := path.Split(req.URL.Path)
 	if dir != "/hash/" {
-		http.Error(w, "mal formed request url", http.StatusBadRequest)
+		http.Error(w, "malformed request url", http.StatusBadRequest)
 		return
 	}
 

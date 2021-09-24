@@ -29,10 +29,12 @@ curl --data "password=AngryMonkey" http://localhost:8080/hash
 The returned string is an id by which you can retrieve the hash 5 seconds five seconds after its creation.
 
 ### Reading a Hash
-The `/hash/{id}` interface returns a simple string that is the base64 encoded hash of
-the password that corresponds to the returned `{id}` from the hash creation endpoint.
+Five seconds after requesting a new hash, the `/hash/{id}` interface may be called to return a bare
+string that is the base64 encoded hash of the password that corresponds to the `{id}` returned
+from the hash creation request.
 
-If the {id} does not exist in the system, a 404 Not Found is returned.
+If the {id} does not exist in the system a `404 Not Found` is returned.  Note that the id won't exist in the
+system until five seconds have elapsed from its time of creation, as noted above.
 
 #### Example
 ```sh
@@ -104,21 +106,20 @@ If this were a real application, that would be the most interesting part.  After
 says we need to return immediately so timing how fast we can return is the smaller part of the
 performance question.
 
-But since the status message is to show the count of POST requests, the average duration best
-associated is the POST request durations.  I'll note that in my testing, my handling of the
-POST requests returns in zero time.  I thought that was an error but printf's of time.Now()
-at the top and bottom of the handler show zero delta at the nanosecond granularity.  Still
-might be an error.
+But since the status message is to show the count of POST requests, the average most closely
+associated with that count is the average duration of those POST requests.  I'll note that in my
+testing, my handling of the POST requests returns in zero time.  I thought that was an error but
+printf's of time.Now() at the top and bottom of the handler show zero delta at the nanosecond
+granularity.  Still, I might have an error there.
 
-An additional ambiguity here: the spec says that the value for total should be the "count of POST
+An additional ambiguity is the requirement that the value for "total" should be the "count of POST
 requests to the /hash endpoint."  In my implementation, I only counted the successful requests.
-The reason being that, as written, the most interesting thing you might learn from this stat is
-the size of the hash cache.  Productionizing this service would require expanding the output of the
-stats endpoint - it should have counts of errors and successes to all endpoints and a separate
-count of the size of the hash cache.
+The reason being that, as written, the most interesting thing you might learn from this status
+message is the size of the hash cache.  Productionizing this service would require expanding the
+output of the stats endpoint - it should have counts of errors and successes to all endpoints and
+a separate count of the size of the hash cache.
 
 ## Productionizing
-
 If this were a production service it would have these additional features
 * More complete logging
    * likely both request logs as well as response logs w/ a tracing id to join them

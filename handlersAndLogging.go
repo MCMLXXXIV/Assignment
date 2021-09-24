@@ -1,4 +1,3 @@
-// contains the http handlers and the logging
 package main
 
 import (

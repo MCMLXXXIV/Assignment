@@ -1,4 +1,3 @@
-// Here are the functions abstracting the hasher - including the hash storage
 package main
 
 import (

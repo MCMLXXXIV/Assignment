@@ -117,6 +117,7 @@ func main() {
 	}
 	log.Print("Hashserver stopping: http server exited cleanly")
 
+	// in practice, I'd also have a timeout on this wait
 	log.Print("Hashserver stopping: waiting for inflight operations")
 	waitgroup.Wait()
 	log.Print("Hashserver stopped cleanly.  Exiting.")

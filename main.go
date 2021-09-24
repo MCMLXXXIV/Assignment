@@ -51,9 +51,12 @@ Productionizing Notes
 	  - if the 5-second sleep was to simulate a local high-cost function, timings for that
 	  - if the 5-second sleep was to simulate a backend network request, timings for that
        * Get a certificate and use only https
-       * Harden against common attacks like huge, possibly unending POST bodies, etc
+       * Harden against more attack vectors - like huge, possibly unending header values, etc
        * The id returned to the client might be better as a guid.  I chose a string type for the
-         internal key to the hash cache for that purpose.
+         internal key to the hash cache for that purpose - but per the spec, it is a number
+       * The hash table currently grows w/o bound.  I added a creation time to the hash table
+         value struct.  Entries could expire after some time or maybe, with a little added
+	 tooling, entries could be removed based on their last access time.
 */
 
 package main

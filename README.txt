@@ -1,3 +1,22 @@
+[23 Sep 2021 2200]
+I think it's just about done.  Things left:
+   [ ] remove this file - it's not the kind of thing you keep in production code
+   [ ] spell check the files
+   [ ] figure out what to do for "document any configuration or run instructions"
+          I'm not sure what the go standard on this is - is it in the README.md,
+	  a README.txt?  Or what the go standard is for go programs released via github.
+	  [ ] find a few go programs released on github and copy the style
+   [ ] increase the shutdown timeout - the spec said to wait until in-flight work is
+       finished but I've added a timeout to that wait.  I think it's only 5 seconds
+       now - make it at least as large as the configured http server timeouts
+   [ ] read the spec again - try to find any missed requirements
+   [ ] check the output of "go doc -all" - my comments are incorrectly placed
+          [ ] can I do something in the comments to have go doc show the run instructions?
+   
+
+oh!  I have a comment in the code that refers readers to the "readme" - make sure to
+have a readme w/ the promised information or change the comment
+
 
 [23 Sep 2021 1555]
 I did some code re-organization - split this up into 3 file:

@@ -1,3 +1,4 @@
+// contains the http handlers and the logging
 package main
 
 import (
@@ -6,48 +7,58 @@ import (
 	"io"
 	"net/http"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-type DurationTableEntry struct {
-	duration time.Duration
-	id       string
+// the format in which we store timings for our successful POST requests
+// if we stored more timings, this might have more fields like traceId, operation, etc
+type durationTableEntry struct {
+	id         string
+	duration   time.Duration
+	startTime  time.Time
+	finalState string
 }
 
-type DurationLogT struct {
+// the table in which we store the timings of our successful POST requests
+// I suspect that there might be a more go-ful way to do this but this is what I went with for the demo
+// my thinking is that we'll need both read (composing the status message) and write (adding new entries)
+// access to this so a mutex makes sense
+type durationLogT struct {
 	mu    sync.Mutex
-	table []DurationTableEntry
+	table []durationTableEntry
 }
 
-var durLog DurationLogT
+var durLog durationLogT
 
+// the contents of our status messsages ready for json serialization
 type statusMessageT struct {
 	Total   int64 `json:"total"`
 	Average int64 `json:"average"`
 }
 
+// here we handle requests to create a new hash
 func handleHashCreate(w http.ResponseWriter, req *http.Request) {
-	if req.Method != "POST" {
+	// storing a pointer so the defer call has the latest values
+	status := &durationTableEntry{startTime: time.Now(), finalState: "unknown"}
+	defer logDuration(status)
 
+	if req.Method != "POST" {
 		http.Error(w, "the hash endpoint is POST only", http.StatusMethodNotAllowed)
+		status.finalState = "failed:methodNotAllowed"
 		return
 	}
 
-	finalState := make(chan string, 1)
-
-	// not counting unsuccessful request for status message
-	defer setDefaultStatus(finalState)
-	defer logDuration(time.Now(), finalState)
-
 	defer req.Body.Close()
+
+	// a 2048 byte password seems pathological - limit here
+	req.Body = http.MaxBytesReader(w, req.Body, 2048)
 	buf := new(strings.Builder)
 	_, err := io.Copy(buf, req.Body)
 	if err != nil {
-		fmt.Fprintf(w, "couldn't copy body")
-		finalState <- "fail"
+		http.Error(w, "Post body too large", http.StatusBadRequest)
+		status.finalState = "failed:bodyTooLarge"
 		return
 	}
 	passwd := buf.String()
@@ -59,51 +70,42 @@ func handleHashCreate(w http.ResponseWriter, req *http.Request) {
 			// tradeoff between user friendly and security-by-obscurity - I've chosen the latter
 			// depending on the client, it might be better to return a more helpful error message
 			http.Error(w, "post not in expected format", http.StatusBadRequest)
-			finalState <- "fail"
+			status.finalState = "failed:postBodyBadlyFormed:badKey"
 			return
 		}
 	} else {
 		http.Error(w, "post not in expected format", http.StatusBadRequest)
-		finalState <- "fail"
+		status.finalState = "failed:postBodyBadlyFormed:noKeyValSeparator"
 		return
 	}
 
+	// the meat of this request: asking the hasher to hash the password
 	var hasherReqId string
 	if hasherReqId, err = hashCreationRequest(passwd); err != nil {
 		errMsg := fmt.Sprintf("hasher failed: %s", err)
 		http.Error(w, errMsg, http.StatusInternalServerError)
-		finalState <- "fail"
+		status.finalState = "failed:hasherReturnedError"
 		return
 	}
-
+	status.id = hasherReqId
 	fmt.Fprint(w, hasherReqId)
-	finalState <- hasherReqId
-
+	status.finalState = "ok"
 	return
 }
 
-func setDefaultStatus(finalState chan string) {
-	finalState <- "default"
-	close(finalState)
-}
+func logDuration(entryArg *durationTableEntry) {
+	entry := *entryArg
+	entry.duration = time.Now().Sub(entry.startTime)
 
-func logDuration(start time.Time, finalState chan string) {
-	duration := time.Since(start)
-	for s := range finalState {
-		if s == "fail" {
-			// error
-			return
-		}
-
-		if _, err := strconv.Atoi(s); err == nil {
-			// may be a little clumsy but we'll log the first parsable id that we recieve
-			entry := DurationTableEntry{duration: duration, id: s}
-			durLog.mu.Lock()
-			durLog.table = append(durLog.table, entry)
-			durLog.mu.Unlock()
-			return
-		}
+	// the spec was unclear; I'm choosing to only log durations of successful request
+	// see readme for details
+	if entry.finalState == "ok" {
+		durLog.mu.Lock()
+		durLog.table = append(durLog.table, entry)
+		durLog.mu.Unlock()
 	}
+	// note: in testing, the average duration was often zero - it seems unlikely but
+	// if there was an error, I didn't find it
 }
 
 func handleHashRead(w http.ResponseWriter, req *http.Request) {
@@ -112,12 +114,18 @@ func handleHashRead(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// being pretty strict on api use
+	// we don't want to let this url work: /hash/foo/1
+	// using a more refined request router would remove the need for this and some of the other
+	// correctness tests in these functions
 	dir, id := path.Split(req.URL.Path)
 	if dir != "/hash/" {
 		http.Error(w, "mal formed request url", http.StatusBadRequest)
 		return
 	}
 
+	// as of this writing, the hasher only returns an error when the key isn't found
+	// if the hasher were something more sophisticated, we'd have a richer diagnostic
 	if hash, err := hashRead(id); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -127,6 +135,11 @@ func handleHashRead(w http.ResponseWriter, req *http.Request) {
 }
 
 func showStats(w http.ResponseWriter, req *http.Request) {
+	if req.Method != "GET" {
+		http.Error(w, "stats GET only operation", http.StatusMethodNotAllowed)
+		return
+	}
+
 	var totalDur int64
 	var totalEntries int64
 	durLog.mu.Lock()
@@ -138,6 +151,8 @@ func showStats(w http.ResponseWriter, req *http.Request) {
 
 	var status statusMessageT
 
+	// the spec called for a number of microseconds as an int - else I might have returned
+	// a float
 	if totalEntries > 0 {
 		status.Average = totalDur / totalEntries
 		status.Total = totalEntries

@@ -1,3 +1,4 @@
+// Here are the functions abstracting the hasher - including the hash storage
 package main
 
 import (
@@ -10,33 +11,37 @@ import (
 	"time"
 )
 
-type TableOfHashesT struct {
+// map of ids -> hash value
+// protecting it w/ a mutex because it will be written to and read asynchronously
+type tableOfHashesT struct {
 	mu    sync.Mutex
-	table map[string]HashEntry
+	table map[string]hashEntry
 }
 
-type HashEntry struct {
-	registrationTime time.Time
-	value            string
+type hashEntry struct {
+	registrationTime time.Time // included a registration time for possible value expiration later
+	value            string    // the string holding the base64 encoded hash value
 }
 
 var createHashTableOnce sync.Once
-var tableInstance *TableOfHashesT
+var tableInstance *tableOfHashesT
 
 var idChan = make(chan string)
 
-func getTableInstance() *TableOfHashesT {
+// I had to create the map - using this singleton pattern to make sure it only
+// gets created once
+func getTableInstance() *tableOfHashesT {
 	if tableInstance == nil {
 		createHashTableOnce.Do(
 			func() {
-				tableInstance = &TableOfHashesT{}
-				tableInstance.table = make(map[string]HashEntry)
+				tableInstance = &tableOfHashesT{}
+				tableInstance.table = make(map[string]hashEntry)
 			})
 	}
-
 	return tableInstance
 }
 
+// all this does is feed the channel that provides new ids
 func hasherRequestIdFeeder() {
 	currentId := 1
 	for {
@@ -45,6 +50,8 @@ func hasherRequestIdFeeder() {
 	}
 }
 
+// this gets an id and then spawns a go routine that waits, then adds the base64
+// encoded hash value to the table
 func hashCreationRequest(passwd string) (hasherReqId string, err error) {
 	err = nil
 
@@ -57,13 +64,15 @@ func hashCreationRequest(passwd string) (hasherReqId string, err error) {
 		log.Printf("Adding new key, hash: [%s] %s\n", entryId, encoded)
 		tableOfHashes := getTableInstance()
 		tableOfHashes.mu.Lock()
-		tableOfHashes.table[entryId] = HashEntry{registrationTime: time.Now().UTC(), value: encoded}
+		tableOfHashes.table[entryId] = hashEntry{registrationTime: time.Now().UTC(), value: encoded}
 		tableOfHashes.mu.Unlock()
 	}(hasherReqId, passwd)
-
 	return
 }
 
+// the only error is failing to find a key - if the table were stored on disk or another server,
+// the errors would be more varied - would need to revisit error handling to make sure our
+// service "does the right thing"
 func hashRead(id string) (hash string, err error) {
 	err = nil
 	tableOfHashes := getTableInstance()

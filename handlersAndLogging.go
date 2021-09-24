@@ -39,58 +39,61 @@ type statusMessageT struct {
 }
 
 // here we handle requests to create a new hash
-func handleHashCreate(w http.ResponseWriter, req *http.Request) {
-	// storing a pointer so the defer call has the latest values
-	status := &durationTableEntry{startTime: time.Now(), finalState: "unknown"}
-	defer logDuration(status)
+func handleHashCreate(waitgroup *sync.WaitGroup) func(w http.ResponseWriter, req *http.Request) {
+	return func(w http.ResponseWriter, req *http.Request) {
+		// storing a pointer so the defer call has the latest values
+		status := &durationTableEntry{startTime: time.Now(), finalState: "unknown"}
+		defer logDuration(status)
 
-	if req.Method != "POST" {
-		http.Error(w, "the hash endpoint is POST only", http.StatusMethodNotAllowed)
-		status.finalState = "failed:methodNotAllowed"
-		return
-	}
-
-	defer req.Body.Close()
-
-	// a 2048 byte password seems pathological - limit here
-	req.Body = http.MaxBytesReader(w, req.Body, 2048)
-	buf := new(strings.Builder)
-	_, err := io.Copy(buf, req.Body)
-	if err != nil {
-		http.Error(w, "Post body too large", http.StatusBadRequest)
-		status.finalState = "failed:bodyTooLarge"
-		return
-	}
-	passwd := buf.String()
-	var command string
-	if i := strings.IndexByte(passwd, '='); i >= 0 {
-		command = passwd[:i]
-		passwd = passwd[i+1:]
-		if command != "password" {
-			// tradeoff between user friendly and security-by-obscurity - I've chosen the latter
-			// depending on the client, it might be better to return a more helpful error message
-			http.Error(w, "post not in expected format", http.StatusBadRequest)
-			status.finalState = "failed:postBodyBadlyFormed:badKey"
+		if req.Method != "POST" {
+			http.Error(w, "the hash endpoint is POST only", http.StatusMethodNotAllowed)
+			status.finalState = "failed:methodNotAllowed"
 			return
 		}
-	} else {
-		http.Error(w, "post not in expected format", http.StatusBadRequest)
-		status.finalState = "failed:postBodyBadlyFormed:noKeyValSeparator"
-		return
-	}
 
-	// the meat of this request: asking the hasher to hash the password
-	var hasherReqId string
-	if hasherReqId, err = hashCreationRequest(passwd); err != nil {
-		errMsg := fmt.Sprintf("hasher failed: %s", err)
-		http.Error(w, errMsg, http.StatusInternalServerError)
-		status.finalState = "failed:hasherReturnedError"
+		defer req.Body.Close()
+
+		// a 2048 byte password seems pathological - limit here
+		req.Body = http.MaxBytesReader(w, req.Body, 2048)
+		buf := new(strings.Builder)
+		_, err := io.Copy(buf, req.Body)
+		if err != nil {
+			http.Error(w, "Post body too large", http.StatusBadRequest)
+			status.finalState = "failed:bodyTooLarge"
+			return
+		}
+		passwd := buf.String()
+		var command string
+		if i := strings.IndexByte(passwd, '='); i >= 0 {
+			command = passwd[:i]
+			passwd = passwd[i+1:]
+			if command != "password" {
+				// tradeoff between user friendly and security-by-obscurity - I've chosen the latter
+				// depending on the client, it might be better to return a more helpful error message
+				http.Error(w, "post not in expected format", http.StatusBadRequest)
+				status.finalState = "failed:postBodyBadlyFormed:badKey"
+				return
+			}
+		} else {
+			http.Error(w, "post not in expected format", http.StatusBadRequest)
+			status.finalState = "failed:postBodyBadlyFormed:noKeyValSeparator"
+			return
+		}
+
+		// the meat of this request: asking the hasher to hash the password
+		var hasherReqId string
+		waitgroup.Add(1) // making sure we don't exit before this background task finishes
+		if hasherReqId, err = hashCreationRequest(passwd, waitgroup); err != nil {
+			errMsg := fmt.Sprintf("hasher failed: %s", err)
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			status.finalState = "failed:hasherReturnedError"
+			return
+		}
+		status.id = hasherReqId
+		fmt.Fprint(w, hasherReqId)
+		status.finalState = "ok"
 		return
 	}
-	status.id = hasherReqId
-	fmt.Fprint(w, hasherReqId)
-	status.finalState = "ok"
-	return
 }
 
 func logDuration(entryArg *durationTableEntry) {
@@ -165,6 +168,7 @@ func showStats(w http.ResponseWriter, req *http.Request) {
 	}
 
 }
+
 
 func shutdownHandler(donechannel chan bool) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {

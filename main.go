@@ -67,10 +67,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 )
 
 func main() {
+	// let's setup our wait group for graceful exit
+	var waitgroup sync.WaitGroup
+
 	listenPort := flag.Int("p", 8080, "the port on which the service will listen")
 	flag.Parse()
 
@@ -80,7 +84,7 @@ func main() {
 	go hasherRequestIdFeeder()
 
 	http.HandleFunc("/shutdown", shutdownHandler(done))
-	http.HandleFunc("/hash", handleHashCreate)
+	http.HandleFunc("/hash", handleHashCreate(&waitgroup))
 	http.HandleFunc("/hash/", handleHashRead)
 	http.HandleFunc("/stats", showStats)
 
@@ -101,14 +105,19 @@ func main() {
 
 	<-done
 
-	log.Print("Hashserver stopping")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer func() {
+
 		cancel()
 	}()
 
+	log.Print("Hashserver stopping: shutting down http server")
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server shutdown failed: %+v", err)
 	}
-	log.Print("Hashserver exited cleanly")
+	log.Print("Hashserver stopping: http server exited cleanly")
+
+	log.Print("Hashserver stopping: waiting for inflight operations")
+	waitgroup.Wait()
+	log.Print("Hashserver stopped cleanly.  Exiting.")
 }

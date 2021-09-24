@@ -52,11 +52,11 @@ func hasherRequestIdFeeder() {
 
 // this gets an id and then spawns a go routine that waits, then adds the base64
 // encoded hash value to the table
-func hashCreationRequest(passwd string) (hasherReqId string, err error) {
-	err = nil
-
+func hashCreationRequest(passwd string, waitgroup *sync.WaitGroup) (hasherReqId string, err error) {
 	hasherReqId = <-idChan
 	go func(entryId string, password string) {
+		// our caller added one to the waitgroup so we don't exit before completing - making sure to call done here
+		defer waitgroup.Done()
 		time.Sleep(time.Second * 5)
 		b := []byte(password)
 		hash := sha512.Sum512(b)
@@ -67,14 +67,13 @@ func hashCreationRequest(passwd string) (hasherReqId string, err error) {
 		tableOfHashes.table[entryId] = hashEntry{registrationTime: time.Now().UTC(), value: encoded}
 		tableOfHashes.mu.Unlock()
 	}(hasherReqId, passwd)
-	return
+	return hasherReqId, nil
 }
 
 // the only error is failing to find a key - if the table were stored on disk or another server,
 // the errors would be more varied - would need to revisit error handling to make sure our
 // service "does the right thing"
 func hashRead(id string) (hash string, err error) {
-	err = nil
 	tableOfHashes := getTableInstance()
 	tableOfHashes.mu.Lock()
 	hashentry, ok := tableOfHashes.table[id]

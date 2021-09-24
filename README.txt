@@ -1,3 +1,14 @@
+[24 Sep 2021 1105]
+
+Added a waitgroup so that the process wouldn't exit before the hash create routine finsishes
+
+At first I added the oposite - a cancellation.  But then I re-read the specs and it says:
+
+     The program should wait for any pending/in-flight work to finish before exiting.
+
+whew.  :)
+
+
 [23 Sep 2021 2200]
 I think it's just about done.  Things left:
    [ ] remove this file - it's not the kind of thing you keep in production code
